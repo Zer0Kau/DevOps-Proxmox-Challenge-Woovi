@@ -1,0 +1,36 @@
+#cloud-config
+autoinstall:
+  version: 1
+  
+  # Seção de identidade para o instalador
+  identity:
+    hostname: ubuntu-packer
+    username: ubuntu
+    password: "*" # Senha trancada, o acesso será apenas por chave SSH
+
+  # Instala pacotes essenciais, incluindo o agente QEMU
+  packages:
+    - openssh-server
+    - qemu-guest-agent
+
+  # Configuração do usuário que será usada pelo cloud-init no primeiro boot
+  user-data:
+    users:
+      - name: ubuntu
+        # Garante que a conta não tenha senha e só possa ser acessada via SSH key
+        lock_passwd: true
+        sudo: ALL=(ALL) NOPASSWD:ALL
+        groups: [sudo, admin]
+        shell: /bin/bash
+        # IMPORTANTE: Insira sua chave pública aqui
+        ssh_authorized_keys:
+          - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDEZw1ZhihF3Qf4M8NWNy5VjcMb2SozL4aZ2OC+vL/fyllDqEKDMrs1GHxqKeH415NwCFImSvdbsyjpp5JnEZvGl1r8sxd6UWWGc9mTX5zoR1iDX4XTENi23Oa0Px3sCjO1Bdx/FXWI9kzdJ1pFTtiAen91Sb1QJOIv2D1LnLXBAFFNQdRNfiI4vg+JhhbPLy9JpgtOtmjNXR6fUuovGdt1bd8sNeolOFfmJ7nYZyvMkH4O+Ihfa6OHcdCtZ3tZPJsG2AjYm/rsvfLnPb8hvA3+ShEjif5IDt6qSggF+ApKxAuB5QlWH8JZULwxB53Onxj+4vQE+j/FrSA2gDS6Gu4sXoZF2VfG3QWSIxRRwrHjRuQ1MvfKrkHmjkfXLLdEzU3yNdPR9LvRLMkc8uV+b4X3ZpXyvBtrZX0dbxgQLLQGkOr/HiRuvzigtdv5pWN/XCffMkuNltYw89GL8lVS4Nkj+mp3Ff12XmF+ftfjWJe4bqYFN1arcGu41E3i+TZRDaTEhBuXmDBnRqmGfago0c0JZUI3L6gx5sm2JSLsIloRUfZd818KUin+V1XtN5bSaFiEVWSfKN2NggfKbSSuA4qP0IlT/w9u6qYLKU4k9GfN3nHkhmMWnrtMmlq8/vaqYrRn+e8DdIg+BGWsLepChG1kEnsPLl6DQlVc2dpS+QccDw== itn@zer0kau"
+    
+    # Garante que o serviço do agente QEMU seja iniciado
+    runcmd:
+      - [ systemctl, enable, --now, qemu-guest-agent ]
+
+  # Garante que a autenticação por senha no SSH seja desativada
+  ssh_pwauth: false
+
+  # Rede: não definir aqui para deixar o Proxmox/Cloud-Init controlar via DHCP
