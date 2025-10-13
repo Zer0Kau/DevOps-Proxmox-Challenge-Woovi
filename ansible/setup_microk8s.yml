@@ -1,0 +1,68 @@
+# ansible/setup_microk8s.yml
+
+- name: 1. Instalar MicroK8s em todos os nós
+  hosts: k8s_cluster
+  become: yes
+  tasks:
+    - name: Instalar MicroK8s via snap
+      snap:
+        name: microk8s
+        classic: yes
+
+    - name: Adicionar usuário 'ubuntu' ao grupo 'microk8s'
+      user:
+        name: ubuntu
+        groups: microk8s
+        append: yes
+    - name: Forçar recarregamento da conexão para aplicar a mudança de grupo
+      meta: reset_connection
+
+- name: 2. Orquestrar a junção dos nós ao cluster
+  hosts: k8s_cluster[0] # Executa apenas no primeiro host (master)
+  become: yes
+  become_user: ubuntu
+  tasks:
+    - name: Aguardar o nó master estar totalmente pronto
+      command: microk8s status --wait-ready
+      timeout: 300 # Espera até 5 minutos
+    - name: Gerar e aplicar token de junção para cada nó worker
+      include_tasks:
+        file: join_worker.yml
+      loop: "{{ groups['k8s_cluster'] | difference([inventory_hostname]) }}"
+      loop_control:
+        loop_var: worker_host
+
+- name: 4. Habilitar HA e Add-ons essenciais
+  hosts: k8s_cluster[0] # Executa novamente no primeiro nó
+  become: yes
+  become_user: ubuntu
+  tasks:
+    - name: Aguardar todos os nós estarem prontos
+      command: microk8s status --wait-ready
+      timeout: 300 # Espera até 5 minutos
+
+    - name: Habilitar Alta Disponibilidade (HA)
+      command: microk8s enable ha-cluster
+      # Este comando pode falhar se já estiver habilitado, então ignoramos o erro
+      ignore_errors: yes
+
+    - name: Habilitar DNS, Dashboard e Storage
+      command: "microk8s enable {{ item }}"
+      loop:
+        - dns
+        - dashboard
+        - hostpath-storage
+
+- name: 5. Verificar o status final do cluster
+  hosts: k8s_cluster[0]
+  become: yes
+  become_user: ubuntu
+  tasks:
+    - name: Exibir status final do cluster HA
+      command: microk8s status --wait-ready
+      register: final_status
+      changed_when: false
+
+    - name: Imprimir status
+      debug:
+        var: final_status.stdout_lines

@@ -21,7 +21,7 @@ variable "proxmox_api_token_secret" {
 variable "target_node" {
   type        = string
   description = "O nó do Proxmox onde as VMs serão criadas (ex: pve)"
-  default     = "host01"
+  default     = "jcz00-vm1"
 }
 
 # --- VM Template Configuration ---
@@ -34,7 +34,7 @@ variable "template_name" {
 variable "ssh_public_key" {
   type        = string
   description = "Chave pública SSH para acesso às VMs."
-  default = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDEZw1ZhihF3Qf4M8NWNy5VjcMb2SozL4aZ2OC+vL/fyllDqEKDMrs1GHxqKeH415NwCFImSvdbsyjpp5JnEZvGl1r8sxd6UWWGc9mTX5zoR1iDX4XTENi23Oa0Px3sCjO1Bdx/FXWI9kzdJ1pFTtiAen91Sb1QJOIv2D1LnLXBAFFNQdRNfiI4vg+JhhbPLy9JpgtOtmjNXR6fUuovGdt1bd8sNeolOFfmJ7nYZyvMkH4O+Ihfa6OHcdCtZ3tZPJsG2AjYm/rsvfLnPb8hvA3+ShEjif5IDt6qSggF+ApKxAuB5QlWH8JZULwxB53Onxj+4vQE+j/FrSA2gDS6Gu4sXoZF2VfG3QWSIxRRwrHjRuQ1MvfKrkHmjkfXLLdEzU3yNdPR9LvRLMkc8uV+b4X3ZpXyvBtrZX0dbxgQLLQGkOr/HiRuvzigtdv5pWN/XCffMkuNltYw89GL8lVS4Nkj+mp3Ff12XmF+ftfjWJe4bqYFN1arcGu41E3i+TZRDaTEhBuXmDBnRqmGfago0c0JZUI3L6gx5sm2JSLsIloRUfZd818KUin+V1XtN5bSaFiEVWSfKN2NggfKbSSuA4qP0IlT/w9u6qYLKU4k9GfN3nHkhmMWnrtMmlq8/vaqYrRn+e8DdIg+BGWsLepChG1kEnsPLl6DQlVc2dpS+QccDw== itn@zer0kau"
+  default = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDk6SpyFkotVzuMEO2gkUYVIAYoeocxFeNrZI0y1bigrPSioPgUSgVvIDijCc8RVDn+Yme9xh4kQmzmvgNJh786mLtW074CfsU6h9Ip7A23N6wJUdX6W94wfu1o4USpue9axlCldRo50dcsHdwtzjhM6iOPG6Gx/U87TlTd83Z5BHJgHAs20cmc7N4cKnbcS4Pn6LBPoLN58rY4Gko2ld6CVV/jFA6OxqcPJK/WSz7kpqwv0Sh6USEFTolW115rEgItY3uPxxnI2y0Tea04Jr/4iixb3KG69CEC0Xva2pJzUeO5e1uFOILpWnu9VdoewZhBHYlHveO+Bii0Vajb60nyu2TdhBL943gw6CwyEZsoum79pQmvV0rg1YSm5wkD37N+kcLpyPHjsLugkpgcCiFn3iWZ1q0aEZ48FOCLT9pHqyG7TepVrrZ8gDQtZOehk74O6XqBhJkpqDw0iijEpjSO3Wsq8sgiwNkKp5UgJ9DQfBXWAgEWotAdcJsDPYWNaeMjELz3ARVOOfUxH43ZvzLlER4e+/K4REc6LNGNfAFXzcb3dWv4iZZyzIjylFea6sU+lz8CQDVVtjKu3y+1tkFF5vXtwwXInRc2AFY9D08ukrj6hQxH+TfbG7DzB6RQ6rRRAZHoO2UpzXI6JPKlp4fGfeq7pHQjViGiSplCXECpWw== nti@A8-NOTE-014"
 }
 
 # --- Cluster Configuration ---
@@ -58,15 +58,6 @@ variable "k8s_disk" {
 # --- Network Configuration ---
 variable "network_bridge" {
   default = "vmbr0"
-}
-variable "network_gateway" {
-  default = "192.168.1.1" # Altere para o seu gateway
-}
-variable "network_base_ip" {
-  default = "192.168.1.200" # IP inicial para as VMs
-}
-variable "network_cidr" {
-  default = "16" # /16
 }
 variable "nameserver" {
   default = "1.1.1.1"

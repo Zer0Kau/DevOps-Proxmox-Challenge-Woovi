@@ -1,0 +1,14 @@
+- name: "Gerar token de junção para o nó {{ worker_host }}"
+  command: microk8s add-node
+  register: join_command_result
+  changed_when: false
+
+- name: "Extrair o comando de junção"
+  set_fact:
+    join_command: "{{ join_command_result.stdout_lines | select('match', 'microk8s join') | first }}"
+  when: join_command_result.stdout_lines is defined
+
+- name: "Juntar o nó {{ worker_host }} ao cluster"
+  command: "{{ join_command }}"
+  delegate_to: "{{ worker_host }}"
+  when: join_command is defined

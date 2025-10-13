@@ -1,4 +1,3 @@
-
 # Variáveis de autenticação para acessar a API do Proxmox
 variable "proxmox_api_url" {
   type = string
@@ -28,7 +27,7 @@ source "proxmox-iso" "ubuntu-server" {
   insecure_skip_tls_verify = true
 
   # Informações gerais da VM
-  node                 = "host01"        # Nome do nó Proxmox
+  node                 = "jcz00-vm1"        # Nome do nó Proxmox
   vm_id                = "900"           # ID da VM
   vm_name              = "ubuntu-server" # Nome da VM
   template_description = "Ubuntu Server para laboratório"
@@ -36,7 +35,7 @@ source "proxmox-iso" "ubuntu-server" {
   # ISO de instalação do Ubuntu Server
   boot_iso {
     type     = "scsi"
-    iso_file = "local:iso/ubuntu-24.04.3-live-server-amd64.iso"
+    iso_file = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
     unmount  = true
   }
 
@@ -134,4 +133,18 @@ build {
   }
 
   # Instalação de Docker removida para acelerar o build. Use Ansible após o provisionamento.
+  provisioner "shell" {
+    inline = [
+      "echo 'Waiting for cloud-init to finish...'",
+      "cloud-init status --wait",
+      "echo 'Cloud-init finished. Installing qemu-guest-agent...'",
+      "sudo apt-get update",
+      "sudo apt-get install -y qemu-guest-agent",
+      "echo 'Configuring qemu-guest-agent to restart on failure...'",
+      "sudo mkdir -p /etc/systemd/system/qemu-guest-agent.service.d",
+      "echo -e '[Service]\nRestart=always\nRestartSec=5' | sudo tee /etc/systemd/system/qemu-guest-agent.service.d/restart.conf",
+      "sudo systemctl daemon-reload",
+      "sudo systemctl restart qemu-guest-agent"
+    ]
+  }
 }

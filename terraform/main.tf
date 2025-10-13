@@ -48,4 +48,6 @@ resource "proxmox_vm_qemu" "k8s" {
   nameserver = var.nameserver
   ciuser     = "ubuntu"
   sshkeys    = var.ssh_public_key
+
+  agent = 1 
 }
