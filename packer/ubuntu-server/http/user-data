@@ -32,5 +32,3 @@ autoinstall:
 
   # Garante que a autenticação por senha no SSH seja desativada
   ssh_pwauth: false
-
-  # Rede: não definir aqui para deixar o Proxmox/Cloud-Init controlar via DHCP

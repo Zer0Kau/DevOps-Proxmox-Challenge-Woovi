@@ -1,30 +1,84 @@
 # ansible/setup_microk8s.yml
 
-- name: 1. Instalar MicroK8s em todos os nós
+- name: 1. Preparar e Instalar MicroK8s
   hosts: k8s_cluster
   become: yes
   tasks:
-    - name: Instalar MicroK8s via snap
-      snap:
-        name: microk8s
-        classic: yes
+    - name: Definir o hostname para corresponder ao inventário
+      hostname:
+        name: "{{ inventory_hostname }}"
+    
+    - name: Aguardar o serviço snapd estar ativo após a mudança de hostname
+      service:
+        name: snapd
+        state: started
+    
+    - name: Instalar MicroK8s do canal estável (v1.30)
+      shell: snap install microk8s --classic --channel=1.30/stable
+      args:
+        creates: /snap/bin/microk8s
 
     - name: Adicionar usuário 'ubuntu' ao grupo 'microk8s'
       user:
         name: ubuntu
         groups: microk8s
         append: yes
+    
     - name: Forçar recarregamento da conexão para aplicar a mudança de grupo
       meta: reset_connection
 
-- name: 2. Orquestrar a junção dos nós ao cluster
+- name: 2. Configurar ambiente de contêineres
+  hosts: k8s_cluster
+  become: yes
+  become_user: ubuntu
+  tasks:
+    - name: Aguardar MicroK8s estar pronto para configuração
+      command: microk8s status --wait-ready
+      timeout: 600
+    
+    - name: Configurar DNS para resolução de registries
+      shell: |
+        microk8s kubectl apply -f - <<EOF
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: coredns
+          namespace: kube-system
+        data:
+          Corefile: |
+            .:53 {
+                errors
+                health {
+                    lameduck 5s
+                }
+                ready
+                kubernetes cluster.local in-addr.arpa ip6.arpa {
+                    pods insecure
+                    fallthrough in-addr.arpa ip6.arpa
+                    ttl 30
+                }
+                forward . 8.8.8.8 8.8.4.4 1.1.1.1
+                cache 30
+                loop
+                reload
+                loadbalance
+            }
+        EOF
+      ignore_errors: yes
+
+    - name: Reiniciar CoreDNS para aplicar configurações
+      command: microk8s kubectl rollout restart deployment/coredns -n kube-system
+      ignore_errors: yes
+
+- name: 3. Orquestrar a junção dos nós ao cluster
   hosts: k8s_cluster[0] # Executa apenas no primeiro host (master)
   become: yes
   become_user: ubuntu
   tasks:
     - name: Aguardar o nó master estar totalmente pronto
       command: microk8s status --wait-ready
-      timeout: 300 # Espera até 5 minutos
+      timeout: 600 # Espera até 10 minutos
+    
     - name: Gerar e aplicar token de junção para cada nó worker
       include_tasks:
         file: join_worker.yml
@@ -39,21 +93,25 @@
   tasks:
     - name: Aguardar todos os nós estarem prontos
       command: microk8s status --wait-ready
-      timeout: 300 # Espera até 5 minutos
+      timeout: 600 # Espera até 10 minutos
 
     - name: Habilitar Alta Disponibilidade (HA)
       command: microk8s enable ha-cluster
-      # Este comando pode falhar se já estiver habilitado, então ignoramos o erro
       ignore_errors: yes
 
-    - name: Habilitar DNS, Dashboard e Storage
+    - name: Habilitar add-ons essenciais
       command: "microk8s enable {{ item }}"
       loop:
         - dns
         - dashboard
         - hostpath-storage
+        - helm3
 
-- name: 5. Verificar o status final do cluster
+    - name: Aguardar add-ons estarem funcionais
+      command: microk8s status --wait-ready
+      timeout: 300
+
+- name: 6. Verificar o status final do cluster
   hosts: k8s_cluster[0]
   become: yes
   become_user: ubuntu
@@ -63,6 +121,24 @@
       register: final_status
       changed_when: false
 
-    - name: Imprimir status
+    - name: Imprimir status do cluster
       debug:
         var: final_status.stdout_lines
+
+    - name: Verificar nós do cluster
+      command: microk8s kubectl get nodes
+      register: nodes_status
+      changed_when: false
+
+    - name: Imprimir nós do cluster
+      debug:
+        var: nodes_status.stdout_lines
+
+    - name: Verificar add-ons habilitados
+      command: microk8s status
+      register: addons_status
+      changed_when: false
+
+    - name: Imprimir add-ons habilitados
+      debug:
+        var: addons_status.stdout_lines

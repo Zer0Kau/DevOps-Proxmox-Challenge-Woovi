@@ -1,0 +1,218 @@
+# ansible/deploy_monitoring_simple.yml
+- name: Deploy Simplified VictoriaMetrics & Grafana Stack
+  hosts: k8s_cluster[0]
+  become: yes
+  become_user: ubuntu
+  vars:
+    grafana_password: "Password123!"
+    grafana_node_port: 32000
+  tasks:
+    - name: 1. Aguardar namespace monitoring ser removido completamente
+      shell: |
+        echo "Aguardando namespace monitoring ser removido..."
+        while microk8s kubectl get namespace monitoring >/dev/null 2>&1; do
+          echo "Namespace ainda existe, aguardando..."
+          sleep 5
+        done
+        echo "Namespace removido com sucesso!"
+      ignore_errors: yes
+
+    - name: 2. Criar namespace de monitoramento
+      command: microk8s kubectl create namespace monitoring
+      retries: 3
+      delay: 10
+
+    - name: 3. Deploiar VictoriaMetrics Single (manifesto direto)
+      shell: |
+        microk8s kubectl apply -f - <<EOF
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: victoria-metrics
+          namespace: monitoring
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: victoria-metrics
+          template:
+            metadata:
+              labels:
+                app: victoria-metrics
+            spec:
+              containers:
+              - name: victoria-metrics
+                image: victoriametrics/victoria-metrics:v1.127.0
+                ports:
+                - containerPort: 8428
+                args:
+                - -storageDataPath=/victoria-metrics-data
+                - -retentionPeriod=1
+                volumeMounts:
+                - name: storage
+                  mountPath: /victoria-metrics-data
+                resources:
+                  requests:
+                    memory: "256Mi"
+                    cpu: "100m"
+                  limits:
+                    memory: "1Gi"
+                    cpu: "500m"
+              volumes:
+              - name: storage
+                emptyDir: {}
+        ---
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: victoria-metrics
+          namespace: monitoring
+        spec:
+          selector:
+            app: victoria-metrics
+          ports:
+          - port: 8428
+            targetPort: 8428
+        EOF
+
+    - name: 4. Adicionar repositório oficial do Grafana
+      command: microk8s helm3 repo add grafana https://grafana.github.io/helm-charts
+      ignore_errors: yes
+
+    - name: 5. Atualizar repositórios Helm
+      command: microk8s helm3 repo update
+
+    - name: 6. Criar arquivo de valores para Grafana
+      copy:
+        dest: "/tmp/grafana-values.yaml"
+        content: |
+          adminPassword: {{ grafana_password }}
+          
+          service:
+            type: NodePort
+            nodePort: {{ grafana_node_port }}
+          
+          datasources:
+            datasources.yaml:
+              apiVersion: 1
+              datasources:
+              - name: VictoriaMetrics
+                type: prometheus
+                url: http://victoria-metrics:8428
+                access: proxy
+                isDefault: true
+          
+          persistence:
+            enabled: false
+          
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "200m"
+
+    - name: 7. Instalar Grafana com versão compatível
+      command: >
+        microk8s helm3 upgrade --install grafana grafana/grafana
+        --namespace monitoring
+        -f /tmp/grafana-values.yaml
+        --version 6.60.0
+        --timeout 10m
+
+    - name: 8. Deploiar Node Exporter (DaemonSet simples)
+      shell: |
+        microk8s kubectl apply -f - <<EOF
+        apiVersion: apps/v1
+        kind: DaemonSet
+        metadata:
+          name: node-exporter
+          namespace: monitoring
+        spec:
+          selector:
+            matchLabels:
+              app: node-exporter
+          template:
+            metadata:
+              labels:
+                app: node-exporter
+            spec:
+              hostNetwork: true
+              hostPID: true
+              containers:
+              - name: node-exporter
+                image: quay.io/prometheus/node-exporter:latest
+                ports:
+                - containerPort: 9100
+                args:
+                - --path.rootfs=/host
+                volumeMounts:
+                - name: root
+                  mountPath: /host
+                  readOnly: true
+                resources:
+                  requests:
+                    memory: "32Mi"
+                    cpu: "50m"
+                  limits:
+                    memory: "64Mi"
+                    cpu: "100m"
+              volumes:
+              - name: root
+                hostPath:
+                  path: /
+              tolerations:
+              - operator: Exists
+        ---
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: node-exporter
+          namespace: monitoring
+        spec:
+          selector:
+            app: node-exporter
+          ports:
+          - port: 9100
+            targetPort: 9100
+        EOF
+
+    - name: 9. Aguardar todos os pods ficarem prontos
+      shell: |
+        echo "Aguardando pods ficarem prontos..."
+        for i in {1..20}; do
+          ready_pods=$(microk8s kubectl get pods -n monitoring --no-headers | grep -c "Running.*1/1")
+          total_pods=$(microk8s kubectl get pods -n monitoring --no-headers | wc -l)
+          echo "Tentativa $i: $ready_pods de $total_pods pods prontos"
+          if [ "$ready_pods" -eq "$total_pods" ] && [ "$total_pods" -gt 0 ]; then
+            echo "Todos os pods estão prontos!"
+            exit 0
+          fi
+          sleep 30
+        done
+        echo "Alguns pods podem ainda estar iniciando, mas continuando..."
+      ignore_errors: true
+
+    - name: 10. Verificar status final
+      command: microk8s kubectl get all -n monitoring
+      register: final_status
+
+    - name: 11. Mostrar status final
+      debug:
+        msg: "{{ final_status.stdout_lines }}"
+
+    - name: 12. Exibir informações de acesso
+      debug:
+        msg: |
+          #################################################################
+          #                                                               #
+          #   VictoriaMetrics + Grafana está pronto!                     #
+          #                                                               #
+          #   Grafana: http://{{ ansible_host }}:{{ grafana_node_port }}        #
+          #   Usuário: admin                                              #
+          #   Senha: {{ grafana_password }}                                   #
+          #                                                               #
+          #   VictoriaMetrics: http://{{ ansible_host }}:8428            #
+          #                                                               #
+          #################################################################

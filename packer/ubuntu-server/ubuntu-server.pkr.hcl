@@ -12,6 +12,14 @@ variable "proxmox_api_token_secret" {
   sensitive = true
 }
 
+variable "target_node" {
+  type = string
+}
+
+variable "ssh_public_key" {
+  type = string
+}
+
 # Nome do storage pool no Proxmox onde os discos das VMs serão criados
 locals {
   disk_storage = "local-lvm"
@@ -27,7 +35,7 @@ source "proxmox-iso" "ubuntu-server" {
   insecure_skip_tls_verify = true
 
   # Informações gerais da VM
-  node                 = "jcz00-vm1"        # Nome do nó Proxmox
+  node                 = var.target_node        # Nome do nó Proxmox
   vm_id                = "900"           # ID da VM
   vm_name              = "ubuntu-server" # Nome da VM
   template_description = "Ubuntu Server para laboratório"
@@ -53,8 +61,8 @@ source "proxmox-iso" "ubuntu-server" {
   }
 
   # Recursos de CPU e memória
-  cores  = "1"    # 1 vCPU
-  memory = "1536" # 1.5GB RAM
+  cores  = "2"    # 2 vCPUs
+  memory = "8192"  # 8GB RAM
 
   # Configuração de rede
   network_adapters {
@@ -132,7 +140,6 @@ build {
     inline = ["sudo cp /tmp/cloud-init-proxmox.cfg /etc/cloud/cloud.cfg.d/cloud-init-proxmox.cfg"]
   }
 
-  # Instalação de Docker removida para acelerar o build. Use Ansible após o provisionamento.
   provisioner "shell" {
     inline = [
       "echo 'Waiting for cloud-init to finish...'",
