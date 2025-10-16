@@ -24,7 +24,7 @@ graph TD
         D -- clona --> I;
     end
 
-    subgraph Cluster Kubernetes (MicroK8s)
+    subgraph "Cluster Kubernetes (MicroK8s)"
         F -- instala/configura --> G;
         F -- instala/configura --> H;
         F -- instala/configura --> I;
