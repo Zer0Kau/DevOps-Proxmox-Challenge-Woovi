@@ -5,6 +5,7 @@ packer/credentials.pkr.hcl
 ansible/group_vars/all/vault.yml
 ansible/sekrets.yml
 terraform/inventory.tpl
+ansible/inventory.ini
 
 # Arquivos de estado/cache
 terraform/.terraform/
