@@ -4,7 +4,7 @@ terraform {
   required_providers {
     proxmox = {
       source  = "telmate/proxmox"
-      version = "3.0.2-rc04" # Versão compatível com a documentação
+      version = "3.0.2-rc04"
     }
   }
 }
@@ -17,9 +17,6 @@ provider "proxmox" {
   pm_log_enable              = false
 }
 
-# --- Criação dos Nós Master ---
-
-# Ultra minimalista: 3 VMs pequenas para todo o cluster (masters, workers e serviços)
 resource "proxmox_vm_qemu" "k8s" {
   count       = var.k8s_count
   name        = "k8s-${count.index + 1}"

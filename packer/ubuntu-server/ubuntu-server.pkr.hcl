@@ -1,4 +1,4 @@
-# Variáveis de autenticação para acessar a API do Proxmox
+# Variáveis definidas no arquivo credentials
 variable "proxmox_api_url" {
   type = string
 }
@@ -18,32 +18,43 @@ variable "target_node" {
 
 variable "ssh_public_key" {
   type = string
+  sensitive=true
 }
+
+# Variáveis definidas no default mas você pode coloca-las no credentials se quiser  
+variable "template_name" {
+  type    = string
+  default = "ubuntu-server" # nome do template!
+}
+variable "vm_id" {
+  type    = string
+  default = "900" # mude para um ID que você não esteja usando no seu Proxmox
+}
+
 
 # Nome do storage pool no Proxmox onde os discos das VMs serão criados
 locals {
   disk_storage = "local-lvm"
 }
 
-
+# Configurações de conexão com o Proxmox
 source "proxmox-iso" "ubuntu-server" {
-  # Configurações de conexão com o Proxmox
   proxmox_url = var.proxmox_api_url
   username    = var.proxmox_api_token_id
   token       = var.proxmox_api_token_secret
-  # Ignora verificação TLS (útil para certificados autoassinados)
+  # Ignora verificação TLS (Caso você use certificados autoassinados)
   insecure_skip_tls_verify = true
 
   # Informações gerais da VM
   node                 = var.target_node        # Nome do nó Proxmox
-  vm_id                = "900"           # ID da VM
-  vm_name              = "ubuntu-server" # Nome da VM
+  vm_id                = var.vm_id               # ID da VM
+  vm_name              = var.template_name       # Nome da VM
   template_description = "Ubuntu Server para laboratório"
 
   # ISO de instalação do Ubuntu Server
   boot_iso {
     type     = "scsi"
-    iso_file = "local:iso/ubuntu-24.04.2-live-server-amd64.iso"
+    iso_file = "local:iso/ubuntu-24.04.2-live-server-amd64.iso" #mude conforme o nome da sua vm, para funcionar direitinho recomendo usar a mesma versão
     unmount  = true
   }
 
@@ -100,9 +111,8 @@ source "proxmox-iso" "ubuntu-server" {
 
   # Usuário e senha para acesso inicial via SSH
   ssh_username = "ubuntu"
+  # Use sua chave SSH:
   ssh_private_key_file = "~/.ssh/id_rsa"
-  # Ou use chave SSH:
-  # ssh_private_key_file = "~/.ssh/id_rsa"
 
   # Timeout maior para instalações demoradas
   ssh_timeout = "40m"

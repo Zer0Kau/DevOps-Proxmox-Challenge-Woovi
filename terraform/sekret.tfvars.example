@@ -1,0 +1,6 @@
+# terraform/sekret.tfvars.example.
+proxmox_api_token_id = "SEU TOKEN ID DO PROXMOX" #Recomendo você criar um usuário apenas com as permissões necessárias para o terraform
+proxmox_api_token_secret = "SUA CHAVE DE API DO PROXMOX"
+proxmox_api_url = "https://IP_DO_SEU_PROXMOX:PORTA_ONDE_O_PROXMOX_ESTÁ_INSTALADO/api2/json"
+ssh_public_key = "ssh-rsa SUA CHAVE PUBLICA user@hostname"
+target_node = "SEU NÓ DO PROXMOX"

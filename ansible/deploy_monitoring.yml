@@ -4,10 +4,10 @@
   become: yes
   become_user: ubuntu
   vars:
-    grafana_password: "Password123!"
-    grafana_node_port: 32000
+    grafana_password: "{{ vault_grafana_password }}"
+    grafana_node_port: "{{ vault_grafana_node_port }}"
   tasks:
-    - name: 1. Aguardar namespace monitoring ser removido completamente
+    - name: 1. Passo caso tenha algum resíduo de namespace com o nome monitoring (desativar se houver algum namespace com mesmo nome)
       shell: |
         echo "Aguardando namespace monitoring ser removido..."
         while microk8s kubectl get namespace monitoring >/dev/null 2>&1; do
@@ -17,12 +17,12 @@
         echo "Namespace removido com sucesso!"
       ignore_errors: yes
 
-    - name: 2. Criar namespace de monitoramento
+    - name: 2. Criando namespace de monitoramento
       command: microk8s kubectl create namespace monitoring
       retries: 3
       delay: 10
 
-    - name: 3. Deploiar VictoriaMetrics Single (manifesto direto)
+    - name: 3. Deploy VictoriaMetrics Single (direto)
       shell: |
         microk8s kubectl apply -f - <<EOF
         apiVersion: apps/v1
@@ -75,14 +75,14 @@
             targetPort: 8428
         EOF
 
-    - name: 4. Adicionar repositório oficial do Grafana
+    - name: 4. Adicionando repositório oficial do Grafana
       command: microk8s helm3 repo add grafana https://grafana.github.io/helm-charts
       ignore_errors: yes
 
-    - name: 5. Atualizar repositórios Helm
+    - name: 5. Atualizando repositórios Helm
       command: microk8s helm3 repo update
 
-    - name: 6. Criar arquivo de valores para Grafana
+    - name: 6. Criando arquivo de valores para Grafana
       copy:
         dest: "/tmp/grafana-values.yaml"
         content: |
@@ -113,7 +113,7 @@
               memory: "512Mi"
               cpu: "200m"
 
-    - name: 7. Instalar Grafana com versão compatível
+    - name: 7. Instalando Grafana com versão compatível
       command: >
         microk8s helm3 upgrade --install grafana grafana/grafana
         --namespace monitoring
@@ -121,7 +121,7 @@
         --version 6.60.0
         --timeout 10m
 
-    - name: 8. Deploiar Node Exporter (DaemonSet simples)
+    - name: 8. Deploy Node Exporter (DaemonSet só que mais simples)
       shell: |
         microk8s kubectl apply -f - <<EOF
         apiVersion: apps/v1
@@ -178,7 +178,7 @@
             targetPort: 9100
         EOF
 
-    - name: 9. Aguardar todos os pods ficarem prontos
+    - name: 9. Aguardando todos os pods ficarem prontos
       shell: |
         echo "Aguardando pods ficarem prontos..."
         for i in {1..20}; do
@@ -194,25 +194,19 @@
         echo "Alguns pods podem ainda estar iniciando, mas continuando..."
       ignore_errors: true
 
-    - name: 10. Verificar status final
+    - name: 10. Verificando status final
       command: microk8s kubectl get all -n monitoring
       register: final_status
 
-    - name: 11. Mostrar status final
+    - name: 11. Status final
       debug:
         msg: "{{ final_status.stdout_lines }}"
 
-    - name: 12. Exibir informações de acesso
+    - name: 12. Exibindo informações de acesso
       debug:
         msg: |
-          #################################################################
-          #                                                               #
-          #   VictoriaMetrics + Grafana está pronto!                     #
-          #                                                               #
-          #   Grafana: http://{{ ansible_host }}:{{ grafana_node_port }}        #
-          #   Usuário: admin                                              #
-          #   Senha: {{ grafana_password }}                                   #
-          #                                                               #
-          #   VictoriaMetrics: http://{{ ansible_host }}:8428            #
-          #                                                               #
-          #################################################################
+          #   VictoriaMetrics + Grafana está pronto!
+          #   Grafana: http://{{ ansible_host }}:{{ grafana_node_port }}  
+          #   Usuário: admin
+          #   Senha: {{ grafana_password }}    #Você pode alterar essa senha após o primeiro login        
+          #   VictoriaMetrics: http://{{ ansible_host }}:8428

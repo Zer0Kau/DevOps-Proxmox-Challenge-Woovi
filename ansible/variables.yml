@@ -1,0 +1,10 @@
+grafana_password: "{{ vault_grafana_password }}"
+mongodb_admin_password: "{{ vault_mongodb_admin_password }}"
+mongodb_app_password: "{{ vault_mongodb_app_password }}"
+
+grafana_node_port: 32000
+mongodb_namespace: "mongodb"
+mongodb_replica_count: 3
+mongodb_storage_size: "10Gi"
+mongodb_node_port: 32017
+mongodb_replica_set_name: "rs0"

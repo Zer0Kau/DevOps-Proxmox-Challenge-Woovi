@@ -13,7 +13,7 @@
         name: snapd
         state: started
     
-    - name: Instalar MicroK8s do canal estável (v1.30)
+    - name: Instalar MicroK8s v1.30 estável (Problemas com helm/grafana da forma que quero subir nas versões mais recentes)
       shell: snap install microk8s --classic --channel=1.30/stable
       args:
         creates: /snap/bin/microk8s

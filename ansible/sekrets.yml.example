@@ -1,0 +1,3 @@
+vault_grafana_password: "SUA SENHA DO GRAFANA"
+vault_mongodb_admin_password: "SUA SENHA DO ADMIN DO DB"
+vault_mongodb_app_password: "SUA SENHA DO APPMONGODB"

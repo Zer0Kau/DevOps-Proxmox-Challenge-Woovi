@@ -1,6 +1,3 @@
-# variables.tf
-
-# --- Proxmox Provider Configuration ---
 variable "proxmox_api_url" {
   type        = string
   description = "URL da API do Proxmox (/api2/json)"

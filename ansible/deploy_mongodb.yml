@@ -1,0 +1,213 @@
+# ansible/deploy_mongodb.yml
+- name: Deploy MongoDB ReplicaSet using Helm Chart
+  hosts: k8s_cluster[0]
+  become: yes
+  become_user: ubuntu
+  vars:
+    mongodb_namespace: "mongodb"
+    mongodb_admin_password: "{{ vault_mongodb_admin_password }}"
+    mongodb_app_password: "{{ vault_mongodb_app_password }}"
+    mongodb_replica_count: 3
+    mongodb_storage_size: "10Gi"
+    mongodb_node_port: 32017
+    mongodb_replica_set_name: "rs0"
+  tasks:
+    - name: 1. Criar namespace para MongoDB
+      command: microk8s kubectl create namespace {{ mongodb_namespace }}
+      ignore_errors: yes
+
+    - name: 2. Adicionando repositório Helm do Bitnami
+      command: microk8s helm3 repo add bitnami https://charts.bitnami.com/bitnami
+      ignore_errors: yes
+
+    - name: 3. Atualizando repositórios do Helm
+      command: microk8s helm3 repo update
+
+    - name: 4. Verificar versões disponíveis do MongoDB
+      command: microk8s helm3 search repo bitnami/mongodb --versions
+      register: mongodb_versions
+      changed_when: false
+
+    - name: 5. Mostrar versões disponíveis
+      debug:
+        msg: "{{ mongodb_versions.stdout_lines[:10] }}"
+
+    - name: 6. Criar arquivo de valores para usar no ReplicaSet
+      copy:
+        dest: "/tmp/mongodb-values.yaml"
+        content: |
+          # Configuração de autenticação
+          auth:
+            enabled: true
+            rootPassword: "{{ mongodb_admin_password }}"
+            username: "appuser"
+            password: "{{ mongodb_app_password }}"
+            database: "appdb"
+
+          # Configuração do ReplicaSet
+          replicaSet:
+            enabled: true
+            name: "{{ mongodb_replica_set_name }}"
+            replicas:
+              secondary: {{ mongodb_replica_count - 1 }}
+              arbiter: 0
+
+          # Configuração de Storage
+          persistence:
+            enabled: true
+            storageClass: "microk8s-hostpath"
+            size: "{{ mongodb_storage_size }}"
+
+          # Recursos para cada pod
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+
+          # Service configuration
+          service:
+            type: ClusterIP
+            port: 27017
+
+          # Service externo para acesso
+          externalAccess:
+            enabled: true
+            service:
+              type: NodePort
+              nodePorts:
+                - {{ mongodb_node_port }}
+
+          # Configurações de segurança
+          podSecurityContext:
+            enabled: true
+            fsGroup: 1001
+            runAsUser: 1001
+
+          # Configurações de rede
+          networkPolicy:
+            enabled: false
+
+          # Métricas (opcional)
+          metrics:
+            enabled: true
+            serviceMonitor:
+              enabled: false
+
+    - name: 7. Instalando o MongoDB em ReplicaSet usando o helm
+      command: >
+        microk8s helm3 upgrade --install mongodb bitnami/mongodb
+        --namespace {{ mongodb_namespace }}
+        -f /tmp/mongodb-values.yaml
+        --version 16.5.40
+        --timeout 15m
+      register: mongodb_install
+      changed_when: true
+
+    - name: 8. Aguardar todos os pods do MongoDB ficarem prontos
+      shell: |
+        for i in {1..30}; do
+          ready_pods=$(microk8s kubectl get pods -n {{ mongodb_namespace }} --no-headers | grep -c "Running.*1/1")
+          total_pods=$(microk8s kubectl get pods -n {{ mongodb_namespace }} --no-headers | wc -l)
+          echo "Tentativa $i: $ready_pods de $total_pods pods prontos"
+          if [ "$ready_pods" -eq "$total_pods" ] && [ "$total_pods" -ge {{ mongodb_replica_count }} ]; then
+            echo "Todos os pods do MongoDB estão prontos!"
+            exit 0
+          fi
+          sleep 30
+        done
+        echo "Alguns pods podem ainda estar iniciando..."
+      ignore_errors: true
+
+    - name: 9. Verificando status
+      command: microk8s kubectl get all -n {{ mongodb_namespace }}
+      register: mongodb_status
+
+    - name: 10. Status
+      debug:
+        msg: "{{ mongodb_status.stdout_lines }}"
+
+    - name: 11. Pegando informações de conexão
+      shell: |
+        echo "=== Informações de Conexão MongoDB ==="
+        echo "Namespace: {{ mongodb_namespace }}"
+        echo "Service Interno: mongodb.{{ mongodb_namespace }}.svc.cluster.local:27017"
+        echo "Acesso Externo: {{ ansible_host }}:{{ mongodb_node_port }}"
+        echo "ReplicaSet: {{ mongodb_replica_set_name }}"
+        echo ""
+        echo "=== Credenciais ==="
+        echo "Admin User: root"
+        echo "Admin Password: {{ mongodb_admin_password }}"
+        echo "App User: appuser"
+        echo "App Password: {{ mongodb_app_password }}"
+        echo "App Database: appdb"
+        echo ""
+        echo "=== Connection String Examples ==="
+        echo "Interno: mongodb://root:{{ mongodb_admin_password }}@mongodb.{{ mongodb_namespace }}.svc.cluster.local:27017/admin?replicaSet={{ mongodb_replica_set_name }}"
+        echo "Externo: mongodb://root:{{ mongodb_admin_password }}@{{ ansible_host }}:{{ mongodb_node_port }}/admin?replicaSet={{ mongodb_replica_set_name }}"
+      register: connection_info
+
+    - name: 12. Exibindo informações de conexão
+      debug:
+        msg: "{{ connection_info.stdout_lines }}"
+
+    - name: 13. Verificando status do ReplicaSet
+      shell: |
+        # Aguardar um pouco para o ReplicaSet ser inicializado
+        sleep 30
+        
+        # Conectar ao MongoDB e verificar status
+        microk8s kubectl exec -n {{ mongodb_namespace }} mongodb-0 -- mongosh --eval "
+          db = db.getSiblingDB('admin');
+          db.auth('root', '{{ mongodb_admin_password }}');
+          rs.status();
+        " 2>/dev/null || echo "ReplicaSet ainda inicializando..."
+      register: rs_status
+      ignore_errors: true
+
+    - name: 14. Mostrando status do ReplicaSet
+      debug:
+        msg: "{{ rs_status.stdout_lines }}"
+      when: rs_status.stdout_lines is defined
+
+    - name: 15. Criar script de teste de conexão
+      copy:
+        dest: "/tmp/test-mongodb.sh"
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          echo "=== Testando Conexão MongoDB ==="
+          
+          # Teste interno
+          echo "1. Teste de conexão interna:"
+          microk8s kubectl exec -n {{ mongodb_namespace }} mongodb-0 -- mongosh --eval "
+            db = db.getSiblingDB('admin');
+            db.auth('root', '{{ mongodb_admin_password }}');
+            db.runCommand({ismaster: 1});
+          " 2>/dev/null
+          
+          echo ""
+          echo "2. Informações dos membros do ReplicaSet:"
+          microk8s kubectl exec -n {{ mongodb_namespace }} mongodb-0 -- mongosh --eval "
+            db = db.getSiblingDB('admin');
+            db.auth('root', '{{ mongodb_admin_password }}');
+            rs.status().members.forEach(function(member) {
+              print('Membro: ' + member.name + ' - Estado: ' + member.stateStr);
+            });
+          " 2>/dev/null
+          
+          echo ""
+          echo "3. Para testar conexão externa:"
+          echo "mongosh 'mongodb://root:{{ mongodb_admin_password }}@{{ ansible_host }}:{{ mongodb_node_port }}/admin?replicaSet={{ mongodb_replica_set_name }}'"
+
+    - name: 16. Executar teste de conexão
+      command: /tmp/test-mongodb.sh
+      register: connection_test
+      ignore_errors: true
+
+    - name: 17. Mostrar resultado do teste
+      debug:
+        msg: "{{ connection_test.stdout_lines }}"
+      when: connection_test.stdout_lines is defined

@@ -1,0 +1,24 @@
+# Arquivos de credenciais
+terraform/sekret.tfvars
+terraform/*.tfvars
+packer/credentials.pkr.hcl
+ansible/group_vars/all/vault.yml
+ansible/sekrets.yml
+terraform/inventory.tpl
+
+# Arquivos de estado/cache
+terraform/.terraform/
+terraform/terraform.tfstate*
+terraform/.terraform.lock.hcl
+.ansible/
+*.retry
+
+# Chaves SSH
+*.pem
+*.key
+id_rsa*
+*.pub
+
+# Logs e temporários
+*.log
+.DS_Store
